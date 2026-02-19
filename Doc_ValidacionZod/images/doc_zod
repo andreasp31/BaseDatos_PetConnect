@@ -1,21 +1,38 @@
 # Validación de Esquemas con Zod
-
 Este documento describe cómo se garantiza que los datos que entran en la API de PetConnect son correctos y consistentes.
-## 1: Esquemas de Validación (Zod)
-Se utiliza la librería Zod para definir la forma y reglas de los objetos JSON que el backend acepta. 
-Se implementa para evitar errores de ejecución en el servidor y asegurar que campos como el email tengan el formato correcto o que las contraseñas tengan una longitud mínima de seguridad.
 
-## 2: Implementaciones de esquemas
-** Esquema Registro:
-*** Nombre y apellidos: mínimo 2 caracteres.
-*** Email: tiene que contener un correo válido.
-*** Clave: tiene que tener mínimo 6 caracteres.
+## 1: Uso de Zod
+Se utiliza la librería Zod para realizar validaciones en tiempo de ejecución. Su implementación permite:
+* **Reducir errores de servidor** al filtrar peticiones con campos vacíos o incorrectos.
+* **Mejorar la expeciencia de usuario** devolviendo unos mensajes informativos de los errores que vayan apareciendo.
+
+## 2: Definición de esquemas de Validación
+### Esquema Registro:
+* **Nombre y apellidos:** mínimo 2 caracteres para que no haya campos vacíos.
+*  **Email:** tiene que contener un correo válido.
+*** Clave: tiene que tener mínimo 6 caracteres por ejemplo más por razones de seguridad.
 *** Y asegurar que clave y clave2 son iguales antes de realizar el registro.
 
 ** Esquema Login:
 *** Hay que tener en cuenta que el email tenga el formato válido antes de consultar si se encuentra en la base de datos.
 
 ## 3: Validación de datos en Servidor
-** Endpoint del registro: 
+Para ello la validación se ejecuta mediante el médoto `.safeParse()`, que permite manejar los errores si detener el servidor.
+** Endpoint de registro: le añadimos lo siguiente que comprueba que si hay errores devolverá un mensaje de error, y desde la vista sea de escritorio como de móvil hay que pasársela.
+```javascript
+const validacion = RegistroSchema.safeParse(req.body);
 
-** Endpoint del login: 
+if (!validacion.success) {
+    const erroresFormateados = validacion.error.format();
+    return res.status(400).json({ 
+        message: "Error de validación",
+        detalles: erroresFormateados 
+    });
+}
+
+** Endpoint de login: comprobar los errores si detenerlo. 
+```javascript
+const validacion = LoginSchema.safeParse(req.body);
+        if (!validacion.success) return res.status(400).json({ message: "Datos inválidos" });
+
+        const { email, clave } = validacion.data;

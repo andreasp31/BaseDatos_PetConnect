@@ -40,7 +40,7 @@ const actividadEsquema = new mongoose.Schema({
         type:Date, required:true
     },
     personasApuntadas:[{
-        usuarioId: { type: mongoose.Schema.Types.ObjectId, ref: 'Usuario' },
+        usuarioEmail: String,
         hora: String
     }]
 })
@@ -86,7 +86,7 @@ async function connectarBd() {
     }
 }
 
-// Ruta de Login
+// Ruta de Login confirmando si el correo están en los usuarios
 app.post("/api/login", async (req, res) => {
     try {
         // Validar con zod
@@ -104,7 +104,7 @@ app.post("/api/login", async (req, res) => {
 
         // JWT,generar Token
         const token = jwt.sign(
-            { id: usuario._id, role: usuario.role },
+            { id: usuario._id,nombre: usuario.nombre, role: usuario.role },
             JWT_SECRET,
             { expiresIn: '2h' }
         );
@@ -114,6 +114,7 @@ app.post("/api/login", async (req, res) => {
             usuario: {
                 id: usuario._id,
                 nombre: usuario.nombre,
+                email: usuario.email,
                 role: usuario.role
             }
         });
@@ -121,7 +122,7 @@ app.post("/api/login", async (req, res) => {
         res.status(500).json({ message: "Error del servidor" });
     }
 });
-
+//Registrarse con los datos y validando que los datos estén correctos
 app.post("/api/registro", async (req, res) => {
     try {
         // Validar con zod
@@ -159,20 +160,85 @@ app.post("/api/registro", async (req, res) => {
         res.status(500).json({ message: "Error interno" });
     }
 });
-
+//Inscribirse a una de las actividades seleccionado la hora que nos interese
 app.post("/api/actividades/inscribir", async(req,res)=>{
-    const { actividadId, usuarioId, hora } = req.body;
+    const { actividadId, email, fechaHora } = req.body;
     try{
-        await Actividades.findByIdAndUpdate(actividadId,{
-            $push: { personasApuntadas: { usuarioId, hora } }
-        });
-        res.json({message:"Te has inscrito correctamente"});
+        //Buscar actividad y ver si hay plazas
+        const actividad = await Actividades.findById(actividadId);
+        let personaApuntada = false;
+
+        for (let i = 0; i < actividad.personasApuntadas.length; i++) {
+            if (actividad.personasApuntadas[i].usuarioEmail === email) {
+                yaEstaApuntado = true;
+                break;
+            }
+        }
+        if (personaApuntada) {
+            return res.status(400).json({ message: "Ya estás inscrito en esta actividad" });
+        }
+        if(actividad.plazas <= 0){
+            return res.status(400).json({messahe:"No quedan plazas para esta actividad"});
+        }
+        await Actividades.findByIdAndUpdate(actividadId,
+            {
+                $push: { 
+                    personasApuntadas: { 
+                        usuarioEmail: email,
+                        hora: fechaHora } 
+                },
+                //Borrar una plaza 
+                $inc: { plazas: -1 }
+            },
+            //Tener documento actualizado
+            {new: true});
+            res.json({message:"Te has inscrito correctamente"});
     }
     catch(error){
         res.status(500).json({ message: "Error al inscribirse" });
     }
 })
 
+//Cancelar la activadad que nos interese
+app.delete("/api/actividades/cancelar",async(req,res)=>{
+    const {actividadId, email} = req.body;
+    try{
+        const resultado = await Actividades.findByIdAndUpdate(actividadId,
+            {
+                //sacar el email de la lista de personas apuntadas
+                $pull: { personasApuntadas: { usuarioEmail: email } },
+                //añadir una plaza ya que queda libre
+                $inc:{plazas:1}
+            },{new:true}
+        )
+    }
+    catch(error){
+        res.status(500).json({ message: "Error al cancelar la reserva" });
+    }
+})
+
+//Cambiarle la hora a una de las reservas inscritas
+app.put("/api/actividades/actualizarHora",async(req,res)=>{
+    const {actividadId, email, nuevaHora} = req.body;
+    try{
+        const resultado = await Actividades.findOneAndUpdate(
+            {
+                _id: actividadId, 
+                "personasApuntadas.usuarioEmail": email
+            },
+            {
+                $set: { "personasApuntadas.$.hora": nuevaHora }
+            },
+            {new:true}
+        );
+        res.json({ message: "Hora actualizada con éxito", actividad: resultado });
+    }
+    catch(error){
+        res.status(500).json({ message: "Error al actualizar la hora" });
+    }
+})
+
+//Como crear una nueva actividad
 app.post("/api/actividades/crear", async (req, res) => {
     const { nombre, descripcion, plazas, fechaHora } = req.body;
     try {
@@ -190,6 +256,7 @@ app.post("/api/actividades/crear", async (req, res) => {
     }
 });
 
+//Consultar la lista de todas las actividades
 app.get("/api/actividades", async (req, res) => {
     try {
         const lista = await Actividades.find();
@@ -199,10 +266,11 @@ app.get("/api/actividades", async (req, res) => {
     }
 });
 
-app.get("/api/mis-actividades/:usuarioId", async (req, res) => {
+//Concultar las actividades al que se está inscritas
+app.get("/api/mis-actividades/:email", async (req, res) => {
     try {
         const misActividades = await Actividades.find({
-            personasApuntadas: req.params.usuarioId
+            "personasApuntadas.usuarioEmail": req.params.email
         });
         res.json(misActividades);
     } catch (error) {

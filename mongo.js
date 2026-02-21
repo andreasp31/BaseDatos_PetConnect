@@ -240,7 +240,7 @@ app.put("/api/actividades/actualizarHora",async(req,res)=>{
 
 //Como crear una nueva actividad
 app.post("/api/actividades/crear", async (req, res) => {
-    const { nombre, descripcion, plazas, fechaHora } = req.body;
+    const { nombre, descripcion, plazas, fechaHora, fecha } = req.body;
     try {
         const nuevaActividad = new Actividades({
             nombre,
@@ -253,6 +253,35 @@ app.post("/api/actividades/crear", async (req, res) => {
         res.status(201).json({ message: "Actividad creada", actividad: nuevaActividad });
     } catch (error) {
         res.status(500).json({ message: "Error al crear actividad" });
+    }
+});
+
+//Permite al administrador cambiar los datos de las actividades
+app.put("/api/actividades/actualizar/:id", async (req, res) => {
+    const { nombre, descripcion, plazas, fecha } = req.body;
+    try {
+        const actualizado = await Actividades.findByIdAndUpdate(
+            req.params.id,
+            { 
+                nombre, 
+                descripcion, 
+                plazas, 
+                fechaHora: fecha 
+            },
+            { new: true }
+        );
+        res.json(actualizado);
+    } catch (error) {
+        res.status(500).json({ message: "Error al actualizar" });
+    }
+});
+//Permite al administrador eliminar los datos de las actividades
+app.delete("/api/actividades/eliminar/:id", async (req, res) => {
+    try {
+        await Actividades.findByIdAndDelete(req.params.id);
+        res.json({ message: "Actividad borrada" });
+    } catch (error) {
+        res.status(500).json({ message: "Error al borrar" });
     }
 });
 

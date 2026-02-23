@@ -41,7 +41,8 @@ const actividadEsquema = new mongoose.Schema({
     },
     personasApuntadas:[{
         usuarioEmail: String,
-        hora: String
+        hora: String,
+        estado: {type:String, default: "inscrito"}
     }]
 })
 
@@ -203,14 +204,24 @@ app.post("/api/actividades/inscribir", async(req,res)=>{
 app.delete("/api/actividades/cancelar",async(req,res)=>{
     const {actividadId, email} = req.body;
     try{
-        const resultado = await Actividades.findByIdAndUpdate(actividadId,
-            {
-                //sacar el email de la lista de personas apuntadas
+        const actividad = await Actividades.findById(actividadId);
+        const hoy = new Date();
+        const limite = new Date(actividad.fechaHora);
+        limite.setHours(0, 0, 0, 0);
+
+        if (hoy < limite) {
+            // Antes de las 12 se borra usuario y se suma plaza
+            await Actividades.findByIdAndUpdate(actividadId, {
                 $pull: { personasApuntadas: { usuarioEmail: email } },
-                //añadir una plaza ya que queda libre
-                $inc:{plazas:1}
-            },{new:true}
-        )
+                $inc: { plazas: 1 } 
+            });
+        } else {
+            // Después de las 12 se cambia a cancelado y no se recupera plaza
+            await Actividades.findOneAndUpdate(
+                { _id: actividadId, "personasApuntadas.usuarioEmail": email },
+                { $set: { "personasApuntadas.$.estado": "cancelado_tarde" } });
+            res.json({ message: "Cancelado tarde. La plaza no se libera." });
+        }
     }
     catch(error){
         res.status(500).json({ message: "Error al cancelar la reserva" });
